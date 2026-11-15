@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/threejs-fps-02/bigpig-collab/bigpig-fps-1/rank.svg)](https://make.fun/bounty/threejs-fps-02/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
 [![reward](https://make.fun/badge/threejs-fps-02/bigpig-collab/bigpig-fps-1/reward.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
 
-EMBERLINE — Foundry Yard is a complete round-based tactical FPS built with three.js: attackers vs defenders across a dusk industrial foundry, with bomb plant/defuse, bot teammates and enemies, an economy and buy menu, grenades, and four staged in-game screenshots.
+EMBERLINE — Foundry Yard is a complete round-based tactical FPS built with three.js: 5v5 attackers vs defenders across a dusk industrial foundry, with bomb plant/defuse, bot teammates and enemies, a buy economy (rifle, scattergun, pistol, plating, grenades), and four staged in-game screenshots.
 
 ## Run it
 
