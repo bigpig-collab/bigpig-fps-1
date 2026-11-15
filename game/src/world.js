@@ -86,7 +86,18 @@ export function buildWorld(scene) {
   const waypoints = WP_DEFS.map(([id, x, z]) => ({ id, x, z, edges: adj.get(id) }));
   const spawns = {
     atk: [[-20, 13], [-18, 14], [-21, 11], [-19, 12]].map(([x, z]) => ({ x, z, yaw: -Math.PI / 4 })),
-    def: [[20, -13], [18, -14], [21, -11], [19, -12]].map(([x, z]) => ({ x, z, yaw: 3 * Math.PI / 4 })),
+    // v2: defenders spawn beside the site they hold (resetRound assigns
+    // def[0]=Havoc/holdA, def[1]=Bramble/holdA2, def[2]=Onyx/holdB,
+    // def[3]=Fable/rotate — same split as the state.js fallback). Yaws
+    // face each bot's site/mid so the buy-phase freeze starts on-angle.
+    // Previously all four spawned on the B side and had to march across
+    // the yard during the buy phase to reach A.
+    def: [
+      { x: -11, z: -9, yaw: 1.19 },
+      { x: -12, z: -13, yaw: 2.03 },
+      { x: 11, z: 9, yaw: -1.95 },
+      { x: 16, z: 11, yaw: 0.97 },
+    ],
   };
   return { colliders: COL, sites: { A: { ...SITES.A }, B: { ...SITES.B } }, spawns, waypoints, bounds: { x: 23, z: 17 } };
 }

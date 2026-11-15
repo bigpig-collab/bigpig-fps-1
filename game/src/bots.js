@@ -4,6 +4,7 @@
 // destination changes. Rifle numbers mirror the weapon.js contract.
 import { applyDamage } from './economy.js';
 import { plantBomb, defuseBomb } from './bomb.js';
+import { throwBotGrenade } from './grenade.js';
 
 const SPEED = 3.8;
 const FIRE_INTERVAL = 0.11; // rifle fire interval
@@ -242,7 +243,10 @@ function fireShot(state, b, tgt, world, api) {
   if (api.fireHitscan) died = !!api.fireHitscan(b, ent, { damage: RIFLE_DMG, head, dist: tgt.dist });
   else died = applyDamage(state, ent, RIFLE_DMG * (tgt.dist > 30 ? 0.7 : 1), head);
   if (died) {
-    if (ent === state.player) state.player.deaths++;
+    // v2: match totals for the Tab scoreboard (previously bot kills were
+    // never counted and bot victims never recorded a death).
+    b.kills = (b.kills || 0) + 1;
+    ent.deaths = (ent.deaths || 0) + 1;
     state.events.push({ type: 'kill', by: b.name, victim: ent === state.player ? 'You' : ent.name, t: state.time });
   }
 }
@@ -254,6 +258,14 @@ function combat(state, b, tgt, dt, world, api) {
     b.targetId = id;
     b.reactT = 0.3 + state.rng() * 0.25;
     b.burstLeft = 0; b.burstT = 0;
+  }
+  // v2: bots clear with a frag while fighting up close — evaluated every
+  // frame, NOT only on first contact (first contacts usually happen at
+  // 20-28 m, past a one-shot gate, and the target rarely changes while
+  // the bot closes in). ~60% to throw within a second of fighting
+  // inside 25 m. One grenade per round per bot.
+  if ((b.grenades || 0) > 0 && tgt.dist < 25 && state.rng() < 0.015) {
+    throwBotGrenade(state, b, ent.pos, world);
   }
   faceToward(b, ent.pos.x, ent.pos.z);
   if (b.reactT > 0) return;
@@ -369,6 +381,12 @@ function convergeSite(state, b, dt, world, api) {
     followPath(state, b, dt, world);
     return;
   }
+  // v2: retaking defender clears the planted site with its frag first
+  // (once per round, 50%) — same one-grenade budget as the attackers.
+  if (!b.thrownAtSite && (b.grenades || 0) > 0 && state.rng() < 0.5) {
+    throwBotGrenade(state, b, SITE_POS[site], world);
+  }
+  b.thrownAtSite = true;
   b.vel.x = 0; b.vel.z = 0;
   const near = nearestAttacker(state, b, world);
   if (near) { faceToward(b, near.pos.x, near.pos.z); b.state = 'guard'; return; }
@@ -408,7 +426,32 @@ function rushMove(state, b, dt, world) {
     b.path = route.slice(); b.pathIdx = bi;
     b.destWp = route[route.length - 1];
   }
-  if (followPath(state, b, dt, world)) scanYaw(state, b);
+  if (followPath(state, b, dt, world)) {
+    // v2: rusher reached the site with no visible enemy — clear it with
+    // the frag before holding the angle (once per round, 50%).
+    if (!b.thrownAtSite && (b.grenades || 0) > 0 && state.rng() < 0.5) {
+      const site = b.role === 'rushB' ? SITE_POS.B : SITE_POS.A;
+      throwBotGrenade(state, b, site, world);
+    }
+    b.thrownAtSite = true;
+    scanYaw(state, b);
+    return;
+  }
+  // v2: closing on the site (within 12 m of the final waypoint) with no
+  // visible enemy — lob the frag in ahead of the entry instead of
+  // waiting for the last step (rounds often end by elimination before a
+  // rusher's path completes, so the arrival-only gate rarely fires).
+  if (!b.thrownAtSite && (b.grenades || 0) > 0 && b.path && b.pathIdx < b.path.length) {
+    const dest = gMap.get(b.path[b.path.length - 1]);
+    if (dest) {
+      const dx = dest.x - b.pos.x, dz = dest.z - b.pos.z;
+      if (dx * dx + dz * dz < 144 && state.rng() < 0.5) {
+        const site = b.role === 'rushB' ? SITE_POS.B : SITE_POS.A;
+        throwBotGrenade(state, b, site, world);
+        b.thrownAtSite = true;
+      }
+    }
+  }
 }
 
 function roleMove(state, b, dt, world) {
@@ -427,7 +470,10 @@ function investigate(state, b, dt, world) {
 }
 
 function updateBot(state, b, dt, world, api) {
-  if (state.phase === 'buy') { roleMove(state, b, dt, world); return; }
+  // v2: buy phase is freeze time — bots hold at their spawn (defenders
+  // already spawn beside their sites, see world.js) instead of marching
+  // across the yard while the player shops.
+  if (state.phase === 'buy') { b.vel.x = 0; b.vel.z = 0; b.yaw = b.baseYaw; return; }
   hearShots(state, b);
   const tgt = acquire(state, b, world);
   if (tgt) { combat(state, b, tgt, dt, world, api); return; }

@@ -31,6 +31,31 @@ function hurt(target, amount) {
 export function throwGrenade(state, fromPos, dirVec, world) {
   if (!state || !state.player || state.player.grenades <= 0) return null;
   if (!fromPos || !dirVec) return null;
+  const g = spawnGrenade(state, fromPos, dirVec, world, 'player', state.player);
+  if (g) state.player.grenades -= 1;
+  return g;
+}
+
+// v2: bots throw frags too (ATK rushers, one per round). Same physics as
+// the player's throw; the grenade carries its thrower so explosion kills
+// credit the right fighter in the killfeed / scoreboard.
+export function throwBotGrenade(state, bot, targetPos, world) {
+  if (!state || !bot || !bot.alive || (bot.grenades || 0) <= 0) return null;
+  if (!targetPos) return null;
+  const from = { x: bot.pos.x, y: bot.pos.y + 1.4, z: bot.pos.z };
+  // Lob at the target: flat direction + a fixed up-arc (matches the
+  // player's THROW_UP arc; the fuse covers the flight time).
+  const dx = targetPos.x - from.x, dz = targetPos.z - from.z;
+  const d = Math.sqrt(dx * dx + dz * dz) || 1;
+  const dir = { x: dx / d, y: 0.25, z: dz / d };
+  const g = spawnGrenade(state, from, dir, world, bot.id, bot);
+  if (g) bot.grenades -= 1;
+  return g;
+}
+
+// Shared flight object: pos/vel/fuse + thrower identity for kill credit.
+function spawnGrenade(state, fromPos, dirVec, world, byId, byEnt) {
+  if (!fromPos || !dirVec) return null;
   const len = Math.sqrt(dirVec.x * dirVec.x + dirVec.y * dirVec.y + dirVec.z * dirVec.z) || 1;
   const g = {
     pos: { x: fromPos.x, y: fromPos.y, z: fromPos.z },
@@ -40,10 +65,10 @@ export function throwGrenade(state, fromPos, dirVec, world) {
       z: (dirVec.z / len) * THROW_SPEED,
     },
     fuse: FUSE,
+    by: byId, byEnt: byEnt || null,
   };
   if (!state.grenades) state.grenades = [];
   state.grenades.push(g);
-  state.player.grenades -= 1;
   return g;
 }
 
@@ -85,13 +110,24 @@ function explode(state, g, api, world) {
     } catch (e) {}
     return false;
   };
+  const label = (t) => (t === state.player ? 'You' : (t.name || t.id));
   const applyTo = (t) => {
     if (!t || !t.alive || !t.pos) return;
     const d = dist3(t.pos, pos);
     if (d > RADIUS) return;
     let dmg = DMG_EDGE + (DMG_CENTER - DMG_EDGE) * (1 - d / RADIUS);
     if (blocked(t.pos, pos)) dmg *= 0.4;
-    hurt(t, dmg);
+    // v2: grenade kills count — killfeed event + thrower credit + victim
+    // death (previously a frag kill was silent and credited to nobody).
+    if (hurt(t, dmg)) {
+      const byEnt = g.byEnt;
+      if (byEnt && byEnt !== t) byEnt.kills = (byEnt.kills || 0) + 1;
+      t.deaths = (t.deaths || 0) + 1;
+      if (state.events) state.events.push({
+        type: 'kill', by: g.by === 'player' ? 'You' : label(byEnt || { name: g.by }),
+        victim: label(t), head: false, weapon: 'grenade', t: state.time,
+      });
+    }
   };
   applyTo(state.player);
   const bots = state.bots || [];

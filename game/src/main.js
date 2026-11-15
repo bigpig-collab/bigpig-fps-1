@@ -92,6 +92,19 @@ const bombLight = new THREE.PointLight(0xff2e2e, 0, 6, 1.8);
 bombMesh.add(bombLight);
 scene.add(bombMesh);
 
+// --- Grenade meshes (v2): thrown frags were simulated but invisible in
+// flight — no mesh ever showed them. One small dark sphere per live
+// grenade (pool of 4, reused every frame like the bot meshes).
+const grenadeMeshes = [];
+for (let i = 0; i < 4; i++) {
+  const gm = new THREE.Mesh(
+    new THREE.SphereGeometry(0.12, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0x232830, roughness: 0.5 }));
+  gm.visible = false; gm.castShadow = true;
+  scene.add(gm);
+  grenadeMeshes.push(gm);
+}
+
 // --- Combat feedback: tracers, muzzle, sparks, sounds --------------------
 function eyeOf(who) {
   return { x: who.pos.x, y: who.pos.y + (who.eyeH || 1.5), z: who.pos.z };
@@ -184,6 +197,12 @@ function scanEvents() {
         effects.spawnTracer(
           { x: bot.pos.x, y: bot.pos.y + 1.5, z: bot.pos.z },
           { x: t.pos.x, y: t.pos.y + 1.2, z: t.pos.z });
+        // v2: bot muzzle flash at the gun (was tracer-only — a bot's
+        // shots had no flash, so firefights read as silent tracers).
+        const fx0 = -Math.sin(bot.yaw), fz0 = -Math.cos(bot.yaw);
+        effects.spawnMuzzle({
+          x: bot.pos.x + fx0 * 0.7, y: bot.pos.y + 1.4, z: bot.pos.z + fz0 * 0.7,
+        });
         playEnemyShot(Math.hypot(t.pos.x - state.player.pos.x, t.pos.z - state.player.pos.z));
       }
     } else if (e.type === 'round') {
@@ -219,7 +238,13 @@ function startMatch() {
   state.round = 1; state.money = 800;
   state.matchWinner = null;
   state.bannerText = ''; state.bannerSub = '';
-  state.player.weapon = 'rifle';
+  // v2: pistol-start economy (CS-style) — the player deploys with the
+  // P9 Sidearm and $800, and buys the VK-7 ($2700) after the first round
+  // win. Previously the rifle was free at spawn and its buy button was
+  // dead content. Grenades start at 0 and persist across rounds.
+  state.player.weapon = 'pistol';
+  state.player.grenades = 0;
+  state.player.armor = 0;
   resetRound(state, world);
   hideMenu();
   try {
@@ -267,6 +292,18 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Digit4') { if (buyItem(state, 'grenade').ok) playBuy(); }
 });
 
+// --- Scoreboard (v2): hold Tab to see match K/D for all 8 fighters. ---
+const scoreOverlay = document.getElementById('scoreboard');
+document.addEventListener('keydown', (e) => {
+  // 'flex', not 'block': #scoreboard is an .overlay (flex-centred); block
+  // would left-align the panel instead of centring it.
+  if (e.code === 'Tab' && scoreOverlay) { e.preventDefault(); scoreOverlay.style.display = 'flex'; }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'Tab' && scoreOverlay) scoreOverlay.style.display = 'none';
+});
+window.addEventListener('blur', () => { if (scoreOverlay) scoreOverlay.style.display = 'none'; });
+
 // --- Camera, bot meshes, bomb mesh ----------------------------------------
 function updateCamera() {
   const p = state.player;
@@ -304,6 +341,16 @@ function syncBombMesh() {
   } else {
     bombMesh.visible = false;
     bombLight.intensity = 0;
+  }
+}
+function syncGrenadeMeshes() {
+  const list = state.grenades || [];
+  for (let i = 0; i < grenadeMeshes.length; i++) {
+    const m = grenadeMeshes[i];
+    const g = list[i];
+    if (!g) { m.visible = false; continue; }
+    m.visible = true;
+    m.position.set(g.pos.x, g.pos.y, g.pos.z);
   }
 }
 
@@ -347,9 +394,27 @@ function frame(now) {
   updateCamera();
   viewmodel.update(state, dt, input);
   effects.update(state, dt, camera);
+  // ?shot=fight: hold Havoc's staged muzzle flash + tracer for the
+  // camera — the effects live 60 ms, but the frozen frame is captured
+  // seconds after load, so re-fire them every frame (same real effects,
+  // sustained for the shot; the pool round-robins, so this reads as one
+  // continuous flash + tracer, not a stack).
+  if (shotMode === 'fight') {
+    const hv = state.bots.find((b) => b.id === 'havoc');
+    if (hv && hv.alive) {
+      const fx0 = -Math.sin(hv.yaw), fz0 = -Math.cos(hv.yaw);
+      effects.spawnMuzzle({
+        x: hv.pos.x + fx0 * 0.7, y: hv.pos.y + 1.4, z: hv.pos.z + fz0 * 0.7,
+      });
+      effects.spawnTracer(
+        { x: hv.pos.x, y: hv.pos.y + 1.5, z: hv.pos.z },
+        { x: state.player.pos.x, y: state.player.pos.y + 1.2, z: state.player.pos.z });
+    }
+  }
   updateHUD(state, hud);
   syncBotMeshes();
   syncBombMesh();
+  syncGrenadeMeshes();
   footstep();
   renderer.render(scene, camera);
 }
@@ -395,6 +460,19 @@ function stageShot(kind) {
   }
   // No sim steps here: in ?shot= mode the frame loop is frozen, so the staged
   // scene (HP, positions, bomb) stays exactly as set above.
+  // v2: the fight cover stages a real in-game exchange — Havoc's muzzle
+  // flash + a tracer toward the player — so the frame reads as a
+  // firefight, not a still life. Both are genuine effects (spawnMuzzle /
+  // spawnTracer), fired once before the single effects.update below.
+  if (kind === 'fight' && havoc) {
+    const hfx = -Math.sin(havoc.yaw), hfz = -Math.cos(havoc.yaw);
+    effects.spawnMuzzle({
+      x: havoc.pos.x + hfx * 0.7, y: havoc.pos.y + 1.4, z: havoc.pos.z + hfz * 0.7,
+    });
+    effects.spawnTracer(
+      { x: havoc.pos.x, y: havoc.pos.y + 1.5, z: havoc.pos.z },
+      { x: p.pos.x, y: p.pos.y + 1.2, z: p.pos.z });
+  }
   scanEvents();
   updateCamera();
   viewmodel.update(state, 0.016, input);
@@ -402,6 +480,7 @@ function stageShot(kind) {
   updateHUD(state, hud);
   syncBotMeshes();
   syncBombMesh();
+  syncGrenadeMeshes();
   renderer.render(scene, camera);
 }
 
