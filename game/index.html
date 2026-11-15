@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMBERLINE — Foundry Yard</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #14181f; font-family: "Segoe UI", system-ui, sans-serif; color: #e8e4da; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; text-shadow: 0 1px 4px #000; }
+  #timer-num { font-size: 30px; font-weight: 700; letter-spacing: 2px; }
+  #timer-num.low { color: #e5484d; }
+  #score-num { font-size: 15px; letter-spacing: 1px; margin-top: 2px; }
+  #round-num { font-size: 12px; opacity: .8; letter-spacing: 2px; }
+  #bomb-panel { position: absolute; top: 14px; left: 16px; text-shadow: 0 1px 4px #000; }
+  #bomb-status { font-size: 15px; font-weight: 600; letter-spacing: 1px; }
+  #bomb-bar { width: 200px; height: 6px; background: rgba(0,0,0,.55); margin-top: 6px; display: none; }
+  #bomb-bar-fill { height: 100%; width: 0%; background: #ff8c2e; }
+  #killfeed { position: absolute; top: 14px; right: 16px; text-align: right; font-size: 13px; text-shadow: 0 1px 4px #000; }
+  #killfeed div { margin-bottom: 3px; opacity: .9; }
+  #crosshair { position: absolute; left: 50%; top: 50%; --gap: 8px; }
+  #crosshair .cl { position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+  #crosshair .cl-t { left: -1px; top: calc(-1 * var(--gap) - 9px); width: 2px; height: 9px; }
+  #crosshair .cl-b { left: -1px; top: var(--gap); width: 2px; height: 9px; }
+  #crosshair .cl-l { top: -1px; left: calc(-1 * var(--gap) - 9px); height: 2px; width: 9px; }
+  #crosshair .cl-r { top: -1px; left: var(--gap); height: 2px; width: 9px; }
+  #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 30px; font-weight: 700; color: #fff; text-shadow: 0 0 4px #000; opacity: 0; }
+  #hitmarker.show { opacity: 1; }
+  #hitmarker.kill { color: #e5484d; }
+  #banner { position: absolute; top: 26%; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 800; letter-spacing: 6px; text-shadow: 0 2px 10px #000; display: none; text-align: center; }
+  #banner-sub { position: absolute; top: calc(26% + 58px); left: 50%; transform: translateX(-50%); font-size: 17px; letter-spacing: 2px; text-shadow: 0 1px 4px #000; display: none; text-align: center; }
+  #vitals { position: absolute; left: 16px; bottom: 16px; text-shadow: 0 1px 4px #000; }
+  #hp-bar-wrap { width: 220px; height: 10px; background: rgba(0,0,0,.55); }
+  #hp-bar { height: 100%; width: 100%; background: #46c26a; }
+  #hp-num { font-size: 26px; font-weight: 700; }
+  #armor-num { font-size: 13px; opacity: .85; }
+  #ammo { position: absolute; right: 16px; bottom: 16px; text-align: right; text-shadow: 0 1px 4px #000; }
+  #weapon-name { font-size: 14px; letter-spacing: 1px; }
+  #ammo-mag { font-size: 34px; font-weight: 700; }
+  #ammo-res { font-size: 15px; opacity: .8; }
+  #money-num { font-size: 16px; font-weight: 600; color: #e8b34b; }
+  #grenade-num { font-size: 13px; opacity: .85; }
+  #buy-hint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); font-size: 15px; letter-spacing: 1px; text-shadow: 0 1px 4px #000; display: none; }
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(10,12,16,.84); }
+  .panel { max-width: 560px; width: 92%; text-align: center; padding: 28px; border: 1px solid #4a4d52; background: #1b2027; }
+  .panel h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: 8px; color: #ff8c2e; }
+  .panel h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: 4px; }
+  .panel p { font-size: 14px; line-height: 1.55; opacity: .9; }
+  .controls { text-align: left; display: inline-block; font-size: 13px; line-height: 1.8; margin: 8px 0 16px; }
+  .controls b { color: #e8b34b; }
+  button { pointer-events: auto; cursor: pointer; font-family: inherit; background: #ff8c2e; color: #14181f; border: 0; font-size: 16px; font-weight: 700; letter-spacing: 2px; padding: 12px 26px; }
+  button:hover { background: #ffb347; }
+  .buy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .buy-card { border: 1px solid #4a4d52; background: #232830; padding: 12px; text-align: left; }
+  .buy-card b { display: block; font-size: 15px; }
+  .buy-card span { font-size: 12px; opacity: .8; }
+  .buy-card .price { color: #e8b34b; font-weight: 700; font-size: 14px; }
+  #buy-overlay { display: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="hud">
+  <div id="topbar">
+    <div id="timer-num">1:40</div>
+    <div id="score-num">ATK 0 : 0 DEF</div>
+    <div id="round-num">ROUND 1</div>
+  </div>
+  <div id="bomb-panel">
+    <div id="bomb-status">Bomb with You</div>
+    <div id="bomb-bar"><div id="bomb-bar-fill"></div></div>
+  </div>
+  <div id="killfeed"></div>
+  <div id="crosshair"><div class="cl cl-t"></div><div class="cl cl-b"></div><div class="cl cl-l"></div><div class="cl cl-r"></div></div>
+  <div id="hitmarker">&times;</div>
+  <div id="banner"></div>
+  <div id="banner-sub"></div>
+  <div id="vitals">
+    <div id="hp-bar-wrap"><div id="hp-bar"></div></div>
+    <div><span id="hp-num">100</span> HP &nbsp;<span id="armor-num">0</span> ARMOR</div>
+  </div>
+  <div id="ammo">
+    <div id="weapon-name">VK-7 Kestrel</div>
+    <div><span id="ammo-mag">30</span> / <span id="ammo-res">90</span></div>
+    <div id="money-num">$800</div>
+    <div id="grenade-num">Grenades: 1</div>
+  </div>
+  <div id="buy-hint">BUY PHASE — press B to open the buy menu</div>
+</div>
+<div id="menu-overlay" class="overlay">
+  <div class="panel">
+    <h1>EMBERLINE</h1>
+    <h2>FOUNDRY YARD</h2>
+    <p>Attackers (Ember) plant the bomb at Site A — the Furnace — or Site B — the Crane.
+       Defenders (Jackal) hold the yard. First team to 5 rounds takes the match.</p>
+    <div class="controls">
+      <b>WASD</b> move &nbsp; <b>Mouse</b> aim &nbsp; <b>Click</b> fire<br>
+      <b>Shift</b> walk &nbsp; <b>Ctrl / C</b> crouch &nbsp; <b>Space</b> jump<br>
+      <b>R</b> reload &nbsp; <b>1 / 2</b> switch weapon &nbsp; <b>G</b> grenade<br>
+      <b>E</b> plant / defuse (hold) &nbsp; <b>B</b> buy menu
+    </div>
+    <br><button id="start-btn">CLICK TO DEPLOY</button>
+  </div>
+</div>
+<div id="buy-overlay" class="overlay">
+  <div class="panel">
+    <h2>BUY MENU</h2>
+    <div class="buy-grid">
+      <div class="buy-card"><b>VK-7 Kestrel</b><span>Assault rifle — 30 rounds, auto</span><br><span class="price">$2700</span><br><button id="buy-rifle-btn">BUY</button></div>
+      <div class="buy-card"><b>P9 Sidearm</b><span>Pistol — 12 rounds</span><br><span class="price">$500</span><br><button id="buy-pistol-btn">BUY</button></div>
+      <div class="buy-card"><b>Plating</b><span>Armor — absorbs damage</span><br><span class="price">$650</span><br><button id="buy-armor-btn">BUY</button></div>
+      <div class="buy-card"><b>Ember Grenade</b><span>Explosive — 1 per round</span><br><span class="price">$300</span><br><button id="buy-nade-btn">BUY</button></div>
+    </div>
+    <p>Press B again to close and return to the round.</p>
+    <button id="buy-close-btn">CLOSE</button>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
