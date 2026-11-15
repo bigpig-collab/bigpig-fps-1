@@ -4,6 +4,10 @@ import { segmentBlocked } from './world.js';
 export const WEAPONS = {
   rifle: { name: 'VK-7 Kestrel', price: 2700, damage: 33, headMul: 4, mag: 30, reserveMax: 90, fireInterval: 0.11, auto: true, reloadTime: 2.4, spreadBase: 0.011, spreadMove: 0.03, recoilPitch: 0.011, recoilYaw: 0.004 },
   pistol: { name: 'P9 Sidearm', price: 500, damage: 26, headMul: 4, mag: 12, reserveMax: 36, fireInterval: 0.16, auto: false, reloadTime: 1.6, spreadBase: 0.014, spreadMove: 0.03, recoilPitch: 0.009, recoilYaw: 0.003 },
+  // v3: VK-9 Scattergun — 6 pellets of 11 damage, semi-auto, 6/24. Close
+  // range only: pellets fall to half damage past 12 m, so it never
+  // outclasses the rifle at range. Player-only (bots keep the rifle).
+  scattergun: { name: 'VK-9 Scattergun', price: 1800, damage: 11, pellets: 6, headMul: 2, mag: 6, reserveMax: 24, fireInterval: 0.9, auto: false, reloadTime: 2.8, spreadBase: 0.05, spreadMove: 0.02, recoilPitch: 0.03, recoilYaw: 0.008 },
 };
 
 // Ray vs head sphere. Returns t > 0 or -1.
@@ -50,37 +54,48 @@ export function tryFire(state, shooter, world, fx) {
   shooter.pitch = Math.max(-1.45, Math.min(1.45, shooter.pitch + w.recoilPitch));
   shooter.yaw += (rnd() - 0.5) * 2 * w.recoilYaw;
   const cp = Math.cos(shooter.pitch);
-  let dx = -Math.sin(shooter.yaw) * cp + (rnd() - 0.5) * 2 * spread;
-  let dy = Math.sin(shooter.pitch) + (rnd() - 0.5) * 2 * spread;
-  let dz = -Math.cos(shooter.yaw) * cp + (rnd() - 0.5) * 2 * spread;
-  const dl = Math.hypot(dx, dy, dz) || 1;
-  dx /= dl; dy /= dl; dz /= dl;
-  const label = (c) => (c === state.player ? 'You' : (c.name || c.id));
-  let best = null, bestT = Infinity, bestHead = false;
-  const consider = (c) => {
-    if (!c || !c.alive || c.team === shooter.team) return;
-    const th = raySphere(ox, oy, oz, dx, dy, dz, c.pos.x, c.pos.y + 1.5, c.pos.z, 0.22);
-    if (th > 0 && th < bestT) { best = c; bestT = th; bestHead = true; }
-    const tb = rayBody(ox, oy, oz, dx, dy, dz, c.pos.x, c.pos.y, c.pos.z);
-    if (tb > 0 && tb < bestT) { best = c; bestT = tb; bestHead = false; }
+  // Central ray (one 'shot' event + one tracer/muzzle per trigger pull).
+  const ray = (spreadMul) => {
+    let rx = -Math.sin(shooter.yaw) * cp + (rnd() - 0.5) * 2 * spread * spreadMul;
+    let ry = Math.sin(shooter.pitch) + (rnd() - 0.5) * 2 * spread * spreadMul;
+    let rz = -Math.cos(shooter.yaw) * cp + (rnd() - 0.5) * 2 * spread * spreadMul;
+    const rl = Math.hypot(rx, ry, rz) || 1;
+    return [rx / rl, ry / rl, rz / rl];
   };
-  consider(state.player);
-  for (let i = 0; i < state.bots.length; i++) consider(state.bots[i]);
+  let [dx, dy, dz] = ray(1);
+  const label = (c) => (c === state.player ? 'You' : (c.name || c.id));
   state.events.push({ type: 'shot', by: label(shooter), weapon: shooter.weapon, x: ox, y: oy, z: oz, dx, dy, dz });
   if (fx && fx.onShot) fx.onShot(shooter, dx, dy, dz);
-  if (!best) return true;
-  const hx = ox + dx * bestT, hy = oy + dy * bestT, hz = oz + dz * bestT;
-  if (segmentBlocked({ x: ox, y: oy, z: oz }, { x: hx, y: hy, z: hz })) return true;
-  let dmg = w.damage * (bestHead ? w.headMul : 1);
-  if (bestT > 30) dmg *= 0.7;
-  best.hp -= dmg;
-  state.events.push({ type: 'hit', by: label(shooter), target: label(best), head: bestHead, dmg: Math.round(dmg), hp: Math.max(0, Math.round(best.hp)) });
-  if (fx && fx.onHit) fx.onHit(best, bestHead);
-  if (best.hp <= 0) {
-    best.hp = 0; best.alive = false; best.deaths = (best.deaths || 0) + 1;
-    shooter.kills = (shooter.kills || 0) + 1;
-    state.events.push({ type: 'kill', by: label(shooter), victim: label(best), head: bestHead, weapon: shooter.weapon });
-    if (fx && fx.onKill) fx.onKill(shooter, best);
+  // Pellet loop: one ray per pellet (the central ray is pellet 0).
+  // Each pellet raycasts independently and can hit, headshot or kill.
+  const pellets = w.pellets || 1;
+  for (let pi = 0; pi < pellets; pi++) {
+    if (pi > 0) [dx, dy, dz] = ray(1);
+    let best = null, bestT = Infinity, bestHead = false;
+    const consider = (c) => {
+      if (!c || !c.alive || c.team === shooter.team) return;
+      const th = raySphere(ox, oy, oz, dx, dy, dz, c.pos.x, c.pos.y + 1.5, c.pos.z, 0.22);
+      if (th > 0 && th < bestT) { best = c; bestT = th; bestHead = true; }
+      const tb = rayBody(ox, oy, oz, dx, dy, dz, c.pos.x, c.pos.y, c.pos.z);
+      if (tb > 0 && tb < bestT) { best = c; bestT = tb; bestHead = false; }
+    };
+    consider(state.player);
+    for (let i = 0; i < state.bots.length; i++) consider(state.bots[i]);
+    if (!best) continue;
+    const hx = ox + dx * bestT, hy = oy + dy * bestT, hz = oz + dz * bestT;
+    if (segmentBlocked({ x: ox, y: oy, z: oz }, { x: hx, y: hy, z: hz })) continue;
+    let dmg = w.damage * (bestHead ? w.headMul : 1);
+    if (bestT > 30) dmg *= 0.7;
+    else if (pellets > 1 && bestT > 12) dmg *= 0.5; // scattergun falloff
+    best.hp -= dmg;
+    state.events.push({ type: 'hit', by: label(shooter), target: label(best), head: bestHead, dmg: Math.round(dmg), hp: Math.max(0, Math.round(best.hp)) });
+    if (fx && fx.onHit) fx.onHit(best, bestHead);
+    if (best.hp <= 0) {
+      best.hp = 0; best.alive = false; best.deaths = (best.deaths || 0) + 1;
+      shooter.kills = (shooter.kills || 0) + 1;
+      state.events.push({ type: 'kill', by: label(shooter), victim: label(best), head: bestHead, weapon: shooter.weapon });
+      if (fx && fx.onKill) fx.onKill(shooter, best);
+    }
   }
   return true;
 }

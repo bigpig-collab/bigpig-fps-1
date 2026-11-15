@@ -3,6 +3,7 @@
 // hud, effects, viewmodel, audio, grenade, economy. No game logic lives here
 // beyond wiring: the sim owns the rules, this file owns the frame.
 import * as THREE from 'three';
+import { OVERVIEW } from './overview.js';
 import { buildWorld, collideCircle, segmentBlocked, insideSite } from './world.js';
 import { createState, resetRound } from './state.js';
 import { stepSim } from './sim.js';
@@ -21,6 +22,7 @@ import { throwGrenade, updateGrenades } from './grenade.js';
 import { buyItem } from './economy.js';
 
 const STEP = 1 / 60;
+console.info(OVERVIEW);
 const canvas = document.getElementById('game-canvas');
 const params = new URLSearchParams(location.search);
 const shotMode = params.get('shot') || null;
@@ -94,9 +96,11 @@ scene.add(bombMesh);
 
 // --- Grenade meshes (v2): thrown frags were simulated but invisible in
 // flight — no mesh ever showed them. One small dark sphere per live
-// grenade (pool of 4, reused every frame like the bot meshes).
+// grenade (pool of 8, reused every frame like the bot meshes; v3: 5v5
+// means more frags in the air than the old pool of 4 covered — the
+// smoke test saw 7 live at once).
 const grenadeMeshes = [];
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 8; i++) {
   const gm = new THREE.Mesh(
     new THREE.SphereGeometry(0.12, 10, 8),
     new THREE.MeshStandardMaterial({ color: 0x232830, roughness: 0.5 }));
@@ -256,7 +260,7 @@ if (startBtn) startBtn.addEventListener('click', startMatch);
 
 // --- Buy menu wiring (uses the page's own overlay) ------------------------
 const buyOverlay = document.getElementById('buy-overlay');
-const buyMap = { 'buy-rifle-btn': 'rifle', 'buy-pistol-btn': 'pistol', 'buy-armor-btn': 'armor', 'buy-nade-btn': 'grenade' };
+const buyMap = { 'buy-rifle-btn': 'rifle', 'buy-pistol-btn': 'pistol', 'buy-scatter-btn': 'scattergun', 'buy-armor-btn': 'armor', 'buy-nade-btn': 'grenade' };
 for (const [id, item] of Object.entries(buyMap)) {
   const btn = document.getElementById(id);
   if (btn) btn.addEventListener('click', () => { if (buyItem(state, item).ok) playBuy(); });
@@ -288,11 +292,15 @@ bindInput(canvas, input, {
 });
 document.addEventListener('keydown', (e) => {
   if (state.phase !== 'buy') return;
-  if (e.code === 'Digit3') { if (buyItem(state, 'armor').ok) playBuy(); }
-  if (e.code === 'Digit4') { if (buyItem(state, 'grenade').ok) playBuy(); }
+  // v3: buy keys 1-5 follow the SHOP order (rifle, pistol, scattergun,
+  // armor, grenade). 1/2/3 arrive via input.js onSwitch (which buys in
+  // buy phase); 4/5 are wired here so Digit3 stays free for the
+  // scattergun switch.
+  if (e.code === 'Digit4') { if (buyItem(state, 'armor').ok) playBuy(); }
+  if (e.code === 'Digit5') { if (buyItem(state, 'grenade').ok) playBuy(); }
 });
 
-// --- Scoreboard (v2): hold Tab to see match K/D for all 8 fighters. ---
+// --- Scoreboard (v2): hold Tab to see match K/D for all 10 fighters. ---
 const scoreOverlay = document.getElementById('scoreboard');
 document.addEventListener('keydown', (e) => {
   // 'flex', not 'block': #scoreboard is an .overlay (flex-centred); block
@@ -432,6 +440,7 @@ function stageShot(kind) {
   const havoc = state.bots.find((b) => b.id === 'havoc');
   const onyx = state.bots.find((b) => b.id === 'onyx');
   const rook = state.bots.find((b) => b.id === 'rook');
+  const ash = state.bots.find((b) => b.id === 'ash');
   if (kind === 'fight') {
     state.phase = 'play'; state.round = 2; state.score.atk = 1; state.score.def = 0;
     state.money = 2450; state.roundTime = 73;
@@ -442,6 +451,10 @@ function stageShot(kind) {
     if (havoc) { havoc.pos.x = -10; havoc.pos.z = 2; havoc.yaw = -2.62; }
     if (onyx) { onyx.pos.x = -3; onyx.pos.z = -3; onyx.yaw = 2.82; }
     if (rook) { rook.pos.x = -8; rook.pos.z = 2; rook.yaw = -0.4; }
+    // v3: Ash (new 5v5 rusher) left of Havoc on the view axis — a fourth
+    // fighter in the cover frame, clear of the (-6,4) crate and not
+    // occluded by Havoc from the camera at (-6,9).
+    if (ash) { ash.pos.x = -13.5; ash.pos.z = -2.5; ash.yaw = -2.6; }
   } else if (kind === 'buy') {
     state.phase = 'buy'; state.money = 4100; state.buyTime = 12;
   } else if (kind === 'plant') {
