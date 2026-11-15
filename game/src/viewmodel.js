@@ -3,6 +3,7 @@
 // attached to the camera. Bob, recoil kick, reload dip, muzzle flash.
 // No allocation in update(): all temps are module-level scalars.
 import * as THREE from '../vendor/three/three.module.min.js';
+import { WEAPONS } from './weapon.js';
 
 const BASE_X = 0.28, BASE_Y = -0.26, BASE_Z = -0.5;
 const FLASH_TIME = 0.06;
@@ -83,10 +84,11 @@ export function buildViewModel(camera) {
       const bobA = moving ? 0.008 : 0.002;
       const bobX = Math.sin(vm.bobPhase * 2) * bobA;
       const bobY = Math.abs(Math.sin(vm.bobPhase)) * bobA;
-      // Reload dip: 0 -> 1 -> 0 across the reload.
+      // Reload dip: 0 -> 1 -> 0 across the reload (uses the weapon's own
+      // reload time, so the scattergun's 2.8 s dip is correct).
       let dip = 0;
       if (p.reloading) {
-        const total = p.weapon === 'pistol' ? 1.6 : 2.4;
+        const total = (WEAPONS[p.weapon] || {}).reloadTime || 2.4;
         const t = total > 0 ? Math.max(0, Math.min(1, 1 - (p.reloadT || 0) / total)) : 0;
         dip = Math.sin(t * Math.PI) * 0.5;
       }

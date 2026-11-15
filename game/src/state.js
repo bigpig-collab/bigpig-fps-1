@@ -16,25 +16,29 @@ export const SPAWNS = {
     { x: -19, z: 14.5, yaw: 0 },
     { x: -21, z: 11.5, yaw: 0 },
     { x: -18, z: 12, yaw: 0 },
+    { x: -19, z: 11, yaw: 0 },
   ],
   def: [
     { x: -11, z: -9, yaw: Math.PI },
     { x: -12, z: -13, yaw: Math.PI },
     { x: 11, z: 9, yaw: Math.PI },
     { x: 16, z: 11, yaw: Math.PI },
+    { x: 2, z: -4, yaw: Math.PI },
   ],
 };
 
-// 7 bots: 3 allies (the player is the 4th attacker: mid lurk, hold wp 4)
-// + 4 defenders.
+// v3: 9 bots — 5v5 (the player is the 5th attacker: mid lurk, hold wp 4)
+// + 5 defenders. New: Ash (second A2 rusher) and Vex (mid hold, wp 4).
 const BOT_DEFS = [
   { id: 'rook', name: 'Rook', team: 'atk', role: 'rushA1', wp: 1 },
   { id: 'sable', name: 'Sable', team: 'atk', role: 'rushA2', wp: 1 },
   { id: 'ivy', name: 'Ivy', team: 'atk', role: 'rushB', wp: 1 },
+  { id: 'ash', name: 'Ash', team: 'atk', role: 'rushA2', wp: 1 },
   { id: 'havoc', name: 'Havoc', team: 'def', role: 'holdA', wp: 9 },
   { id: 'bramble', name: 'Bramble', team: 'def', role: 'holdA2', wp: 15 },
   { id: 'onyx', name: 'Onyx', team: 'def', role: 'holdB', wp: 12 },
   { id: 'fable', name: 'Fable', team: 'def', role: 'rotate', wp: 14 },
+  { id: 'vex', name: 'Vex', team: 'def', role: 'holdMid', wp: 4 },
 ];
 
 function makeBot(def, i) {
@@ -94,8 +98,8 @@ export function resetRound(state, world) {
   p.vel.x = 0; p.vel.y = 0; p.vel.z = 0;
   p.yaw = s0.yaw || 0; p.pitch = 0;
   p.hp = 100; p.alive = true; p.crouch = false; p.onGround = true;
-  p.mag = p.weapon === 'rifle' ? 30 : 12;
-  p.reserve = p.weapon === 'rifle' ? 90 : 36;
+  p.mag = p.weapon === 'rifle' ? 30 : p.weapon === 'scattergun' ? 6 : 12;
+  p.reserve = p.weapon === 'rifle' ? 90 : p.weapon === 'scattergun' ? 24 : 36;
   p.reloading = false; p.reloadT = 0;
   // v2: grenades persist across rounds (no free refill) — the $300 buy
   // is a real decision now, like the rifle. startMatch zeroes them for

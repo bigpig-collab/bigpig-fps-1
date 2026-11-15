@@ -18,7 +18,7 @@ const ROUTES = {
   rushA2: [1, 2, 3, 4, 5, 14, 13, 15, 6, 7, 8],
   rushB: [1, 2, 10, 11],
 };
-const HOLD_WP = { holdA: 9, holdA2: 15, holdB: 12 };
+const HOLD_WP = { holdA: 9, holdA2: 15, holdB: 12, holdMid: 4 };
 const SITE_WP = { A: 8, B: 11 };
 const SITE_POS = { A: { x: -16, z: -11 }, B: { x: 16, z: 11 } };
 
@@ -455,7 +455,7 @@ function rushMove(state, b, dt, world) {
 }
 
 function roleMove(state, b, dt, world) {
-  if (b.role === 'holdA' || b.role === 'holdA2' || b.role === 'holdB') { holdPos(state, b, dt, world); return; }
+  if (b.role === 'holdA' || b.role === 'holdA2' || b.role === 'holdB' || b.role === 'holdMid') { holdPos(state, b, dt, world); return; }
   if (b.role === 'rotate') { rotatePos(state, b, dt, world); return; }
   rushMove(state, b, dt, world);
 }

@@ -32,6 +32,7 @@ export function bindInput(canvas, input, cb = {}) {
     else if (e.code === 'Space') { if (cb.onJump) cb.onJump(); }
     else if (e.code === 'Digit1') { if (cb.onSwitch) cb.onSwitch('rifle'); }
     else if (e.code === 'Digit2') { if (cb.onSwitch) cb.onSwitch('pistol'); }
+    else if (e.code === 'Digit3') { if (cb.onSwitch) cb.onSwitch('scattergun'); }
   };
   const onKeyUp = (e) => {
     input.keys.delete(e.code);

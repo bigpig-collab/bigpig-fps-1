@@ -1,6 +1,6 @@
 // EMBERLINE — Foundry Yard: scene, colliders, line-of-sight, bomb sites.
 import * as THREE from 'three';
-import { PALETTE, MATERIALS } from './palette.js';
+import { PALETTE, MATERIALS, skyTex, cloudTex, letterTex, hazardTex } from './palette.js';
 
 const SITES = { A: { x: -16, z: -11 }, B: { x: 16, z: 11 } };
 const CRATES = [[-14, -6], [-10, -12], [-6, 4], [0, -6], [4, 8], [8, -4], [12, 2], [-18, 2], [18, -6], [2, -12], [-2, 12], [14, -10], [-14, 6]];
@@ -18,9 +18,47 @@ function addBox(scene, mat, cx, cy, cz, sx, sy, sz, collide = true) {
   return m;
 }
 
+function addCyl(scene, mat, cx, cy, cz, r, h, collide = true) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), mat);
+  m.position.set(cx, cy, cz);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  if (collide) COL.push({ min: { x: cx - r, y: cy - h / 2, z: cz - r }, max: { x: cx + r, y: cy + h / 2, z: cz + r } });
+  return m;
+}
+
 export function buildWorld(scene) {
   COL = [];
-  scene.background = new THREE.Color(PALETTE.sky);
+  // v3: dusk sky dome (gradient) instead of a flat background colour —
+  // the sky is ~40% of every screenshot and was a solid void. The dome
+  // and everything in it ignore fog so the gradient stays readable.
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(110, 24, 12),
+    new THREE.MeshBasicMaterial({ map: skyTex(), side: THREE.BackSide, fog: false }));
+  scene.add(dome);
+  // Low dusk sun in the south-east (light comes from the same quadrant)
+  // + a faint halo; visible in the buy shot and the menu orbit.
+  const sunDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(4, 24),
+    new THREE.MeshBasicMaterial({ color: 0xffc46b, fog: false, transparent: true, opacity: 0.95 }));
+  sunDisc.position.set(78, 14, 45);
+  sunDisc.lookAt(0, 2, 0);
+  scene.add(sunDisc);
+  const halo = new THREE.Mesh(
+    new THREE.CircleGeometry(9, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff8c2e, fog: false, transparent: true, opacity: 0.22 }));
+  halo.position.set(78.5, 14, 45.5);
+  halo.lookAt(0, 2, 0);
+  scene.add(halo);
+  // Drifting cloud billboards, high over the yard.
+  const cloudMat = new THREE.MeshBasicMaterial({
+    map: cloudTex(), transparent: true, opacity: 0.55, fog: false, depthWrite: false });
+  for (const [x, y, z, w] of [[-40, 26, -50, 22], [30, 30, -60, 28], [55, 24, 10, 18], [-55, 28, 30, 24], [0, 32, -70, 30]]) {
+    const cl = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 0.5), cloudMat);
+    cl.position.set(x, y, z);
+    cl.lookAt(0, 4, 0);
+    scene.add(cl);
+  }
   scene.fog = new THREE.Fog(PALETTE.fog, 30, 95);
   const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
   sun.position.set(18, 26, 10);
@@ -61,6 +99,66 @@ export function buildWorld(scene) {
   addBox(scene, steel, 19, 2.5, 14, 3, 5, 3);
   addBox(scene, steel, 19, 5.2, 12.2, 3, 0.6, 4.2, false);
 
+  // v3 props: barrel clusters against the walls (clear of every waypoint
+  // lane), sandbag rows on the site approaches, pipes along the north
+  // wall, floodlight poles, and a stacked container for verticality.
+  const rust = MATERIALS.barrel(PALETTE.rust);
+  const barrelDark = MATERIALS.barrel(PALETTE.steelDark);
+  for (const [x, z] of [[-21.5, 0], [-20.6, 1.2], [21.5, -2], [20.6, -3.1], [10, 15.5]]) {
+    addCyl(scene, (x + z) % 2 === 0 ? rust : barrelDark, x, 0.55, z, 0.45, 1.1);
+  }
+  addCyl(scene, rust, -21.5, 1.65, 0, 0.45, 1.1);
+  addCyl(scene, barrelDark, 21.5, 1.65, -2, 0.45, 1.1);
+  const sand = MATERIALS.sandbag();
+  for (const [x, z, ry] of [[-13.5, -6.5, 0.5], [13.5, 6.5, -0.5], [-2, 14.8, 0]]) {
+    addBox(scene, sand, x, 0.25, z, 2.4, 0.5, 0.8, true);
+    addBox(scene, sand, x + 0.4, 0.75, z + 0.1, 1.8, 0.5, 0.7, true);
+  }
+  // Pipes: one long run along the north wall + two down-pipes (high up,
+  // no collision — they sit above head height against the wall).
+  const pipe = MATERIALS.pipe();
+  const pipeRun = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 40, 10), pipe);
+  pipeRun.rotation.z = Math.PI / 2;
+  pipeRun.position.set(0, 3.5, -16.8);
+  scene.add(pipeRun);
+  for (const px of [-10, 10]) {
+    const dp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 3.2, 10), pipe);
+    dp.position.set(px, 1.9, -16.8);
+    scene.add(dp);
+  }
+  // Floodlight poles (glow heads, no extra lights — the 3 point lights
+  // already cover the yard).
+  for (const [x, z] of [[-8, 16], [8, -16]]) {
+    addCyl(scene, steel, x, 3, z, 0.12, 6);
+    addBox(scene, MATERIALS.glow(PALETTE.sodium), x, 6.1, z, 0.5, 0.2, 0.3, false);
+  }
+  // Stacked container on the B container + a third container against
+  // the south wall near the ATK spawn for cover (clear of the wp1->wp2
+  // rush lane, which runs z 8..13).
+  addBox(scene, MATERIALS.container(PALETTE.containerA), 6, 3.6, 13, 6, 2.4, 2.6);
+  addBox(scene, MATERIALS.container(PALETTE.containerB), -13, 1.2, 15, 6, 2.4, 2.6);
+  // Site letter boards: big "A" over the furnace, "B" over the crane.
+  const boardA = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.4),
+    new THREE.MeshBasicMaterial({ map: letterTex('A', '#ff8c2e'), transparent: true, side: THREE.DoubleSide }));
+  boardA.position.set(-19, 4.6, -14);
+  scene.add(boardA);
+  const boardB = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.4),
+    new THREE.MeshBasicMaterial({ map: letterTex('B', '#35c4d8'), transparent: true, side: THREE.DoubleSide }));
+  boardB.position.set(19, 6.8, 14);
+  boardB.rotation.y = Math.PI;
+  scene.add(boardB);
+  // Wall trim: sodium glow strips along the top inner edge of each wall
+  // + vent boxes on the north wall (all above head height, no collision).
+  const trim = MATERIALS.glow(PALETTE.sodium);
+  addBox(scene, trim, 0, 4.2, -17.0, 47.2, 0.12, 0.12, false);
+  addBox(scene, trim, 0, 4.2, 17.0, 47.2, 0.12, 0.12, false);
+  addBox(scene, trim, -23.0, 4.2, 0, 0.12, 0.12, 34, false);
+  addBox(scene, trim, 23.0, 4.2, 0, 0.12, 0.12, 34, false);
+  addBox(scene, MATERIALS.steelDark(), -10, 3, -16.9, 2, 1, 0.3, false);
+  addBox(scene, MATERIALS.steelDark(), 10, 3, -16.9, 2, 1, 0.3, false);
+
   // Site floor decals: tinted pad + ring.
   for (const k of ['A', 'B']) {
     const s = SITES[k], hex = k === 'A' ? PALETTE.siteA : PALETTE.siteB;
@@ -71,6 +169,19 @@ export function buildWorld(scene) {
     ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, 0.03, s.z);
     scene.add(ring);
   }
+
+  // v3: hazard-stripe decals at both site entries + a worn centre ring
+  // marking mid — floor paint that reads in the fight/plant shots.
+  for (const [x, z] of [[-16, -7.2], [16, 7.2]]) {
+    const hz = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.2),
+      new THREE.MeshBasicMaterial({ map: hazardTex(), transparent: true, opacity: 0.85 }));
+    hz.rotation.x = -Math.PI / 2; hz.position.set(x, 0.02, z);
+    scene.add(hz);
+  }
+  const midRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.85, 40),
+    new THREE.MeshBasicMaterial({ color: PALETTE.sodium, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+  midRing.rotation.x = -Math.PI / 2; midRing.position.set(0, 0.02, 0);
+  scene.add(midRing);
 
   // Warm sodium / ember point lights (mounted on furnace, crane, gantry).
   const lamp = (x, y, z, hex) => {
@@ -85,18 +196,21 @@ export function buildWorld(scene) {
   for (const [a, b] of WP_EDGES) { adj.get(a).push(b); adj.get(b).push(a); }
   const waypoints = WP_DEFS.map(([id, x, z]) => ({ id, x, z, edges: adj.get(id) }));
   const spawns = {
-    atk: [[-20, 13], [-18, 14], [-21, 11], [-19, 12]].map(([x, z]) => ({ x, z, yaw: -Math.PI / 4 })),
+    // v3: 5v5 — five ATK spawns (player + 4 bots) and five DEF spawns.
+    atk: [[-20, 13], [-18, 14], [-21, 11], [-19, 12], [-19, 11]].map(([x, z]) => ({ x, z, yaw: -Math.PI / 4 })),
     // v2: defenders spawn beside the site they hold (resetRound assigns
     // def[0]=Havoc/holdA, def[1]=Bramble/holdA2, def[2]=Onyx/holdB,
     // def[3]=Fable/rotate — same split as the state.js fallback). Yaws
     // face each bot's site/mid so the buy-phase freeze starts on-angle.
     // Previously all four spawned on the B side and had to march across
     // the yard during the buy phase to reach A.
+    // v3: def[4]=Vex/holdMid spawns at mid (2,-4), facing the crossroads.
     def: [
       { x: -11, z: -9, yaw: 1.19 },
       { x: -12, z: -13, yaw: 2.03 },
       { x: 11, z: 9, yaw: -1.95 },
       { x: 16, z: 11, yaw: 0.97 },
+      { x: 2, z: -4, yaw: 0.46 },
     ],
   };
   return { colliders: COL, sites: { A: { ...SITES.A }, B: { ...SITES.B } }, spawns, waypoints, bounds: { x: 23, z: 17 } };

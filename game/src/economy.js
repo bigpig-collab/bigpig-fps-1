@@ -1,13 +1,16 @@
 // EMBERLINE — shop, buy rules, damage split (Track B).
+// v3: five items — the VK-9 Scattergun joins between the sidearm and
+// the plating (buy keys 1–5 follow this order).
 export const SHOP = [
   { id: 'rifle', name: 'VK-7 Kestrel', price: 2700 },
   { id: 'pistol', name: 'P9 Sidearm', price: 500, owned: true },
-  { id: 'grenade', name: 'Frag Grenade', price: 300 },
+  { id: 'scattergun', name: 'VK-9 Scattergun', price: 1800 },
   { id: 'armor', name: 'Plating', price: 650 },
+  { id: 'grenade', name: 'Frag Grenade', price: 300 },
 ];
 
-const MAG = { rifle: 30, pistol: 12 };
-const RESERVE = { rifle: 90, pistol: 36 };
+const MAG = { rifle: 30, pistol: 12, scattergun: 6 };
+const RESERVE = { rifle: 90, pistol: 36, scattergun: 24 };
 const HEAD_MUL = 4;
 
 // Damage split: headshots x4, then armour absorbs 50% of what is left while
@@ -42,8 +45,8 @@ export function buyItem(state, id) {
   if (id === 'grenade' && p.grenades >= 2) return { ok: false, reason: 'grenades-full' };
   if (state.money < item.price) return { ok: false, reason: 'no-money' };
   state.money -= item.price;
-  if (id === 'rifle') {
-    p.weapon = 'rifle'; p.mag = MAG.rifle; p.reserve = RESERVE.rifle;
+  if (id === 'rifle' || id === 'scattergun') {
+    p.weapon = id; p.mag = MAG[id]; p.reserve = RESERVE[id];
     p.reloading = false; p.reloadT = 0;
   } else if (id === 'grenade') {
     p.grenades += 1;
@@ -88,7 +91,7 @@ export function buildBuyMenu(state, onBuy) {
     menuEl.appendChild(list);
     const hint = document.createElement('div');
     hint.className = 'buy-hint';
-    hint.textContent = 'Keys 1–4 to buy — buy phase only';
+    hint.textContent = 'Keys 1–5 to buy — buy phase only';
     menuEl.appendChild(hint);
     document.body.appendChild(menuEl);
   } else {
