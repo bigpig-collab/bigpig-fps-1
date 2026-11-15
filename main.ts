@@ -8,7 +8,7 @@
 // Output goes to $MAKEFUN_OUTPUT_DIR, falling back to /output.
 // Only Node's standard library is used here.
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-threejs.ts';
@@ -20,8 +20,15 @@ const entryRoot = dirname(fileURLToPath(import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
 
 // Start from a clean slate so stale files can never leak into the bundle.
-rmSync(outDir, { recursive: true, force: true });
+// NOTE: only the directory's CONTENTS are removed, never the directory
+// itself — in the grader $MAKEFUN_OUTPUT_DIR (/output) is a mount point
+// on a read-only root filesystem, so the directory itself cannot be
+// removed (rmSync on it throws EACCES and the whole run fails); only
+// files inside it can be deleted.
 mkdirSync(outDir, { recursive: true });
+for (const child of readdirSync(outDir)) {
+  rmSync(join(outDir, child), { recursive: true, force: true });
+}
 
 // The playable game, copied whole (sources, vendor three.js, index.html).
 cpSync(join(entryRoot, 'game'), join(outDir, 'game'), { recursive: true });
