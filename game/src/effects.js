@@ -69,15 +69,22 @@ export function buildEffects(scene) {
   scene.add(boomLight);
   let boomT = 0; // 1 -> 0 while an explosion is animating
 
-  // --- Muzzle flash: one reused sprite. ---
-  const muzzleMat = new THREE.SpriteMaterial({
-    map: radialTexture(), color: 0xffc46b, transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const muzzle = new THREE.Sprite(muzzleMat);
-  muzzle.visible = false;
-  scene.add(muzzle);
-  let muzzleT = 0;
+  // --- Muzzle flash: a small pool of reused sprites (v2: was a single
+  // sprite, so only the player's flash ever showed — bot shots never got
+  // one. Now up to 6 flashes can be visible at once, e.g. a firefight).
+  const MUZZLES = 6;
+  const muzzlePool = [];
+  const muzzleT = new Float32Array(MUZZLES);
+  for (let i = 0; i < MUZZLES; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialTexture(), color: 0xffc46b, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    m.visible = false;
+    scene.add(m);
+    muzzlePool.push(m);
+  }
+  let muzzleSlot = 0;
 
   const fx = {
     update(state, dt, camera) {
@@ -121,11 +128,13 @@ export function buildEffects(scene) {
         boomLight.intensity = boomT * 40;
         if (boomT <= 0) { boom.visible = false; boomLight.intensity = 0; }
       }
-      // Muzzle flash fades fast.
-      if (muzzleT > 0) {
-        muzzleT -= dt;
-        muzzleMat.opacity = Math.max(0, muzzleT / 0.06);
-        if (muzzleT <= 0) muzzle.visible = false;
+      // Muzzle flashes fade fast (pooled: each slot has its own timer).
+      for (let i = 0; i < MUZZLES; i++) {
+        if (muzzleT[i] <= 0) continue;
+        muzzleT[i] -= dt;
+        const m = muzzlePool[i];
+        m.material.opacity = Math.max(0, muzzleT[i] / 0.06);
+        if (muzzleT[i] <= 0) m.visible = false;
       }
     },
 
@@ -176,12 +185,17 @@ export function buildEffects(scene) {
     },
 
     spawnMuzzle(pos, dir) {
-      muzzle.position.set(pos.x, pos.y, pos.z);
+      // Round-robin pool slot: a bot's flash no longer overwrites the
+      // player's (and vice versa) when both fire in the same frame.
+      const idx = muzzleSlot;
+      muzzleSlot = (muzzleSlot + 1) % MUZZLES;
+      const m = muzzlePool[idx];
+      m.position.set(pos.x, pos.y, pos.z);
       const s = 0.35 + Math.random() * 0.2;
-      muzzle.scale.set(s, s, 1);
-      muzzleT = 0.06;
-      muzzleMat.opacity = 1;
-      muzzle.visible = true;
+      m.scale.set(s, s, 1);
+      muzzleT[idx] = 0.06;
+      m.material.opacity = 1;
+      m.visible = true;
     },
 
     updateFromEvents(state) {

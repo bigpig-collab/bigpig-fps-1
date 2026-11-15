@@ -46,6 +46,9 @@ function makeBot(def, i) {
     state: 'move', wp: def.wp, holdT: 6, aimErr: 0,
     burstLeft: 0, burstT: 0, reactT: 0, hearPos: null,
     role: def.role, hasBomb: false,
+    // v2: one frag per round for ATK bots (bot grenade throws), match
+    // totals for the Tab scoreboard (kills/deaths accumulate all match).
+    grenades: 1, kills: 0, deaths: 0,
     // runtime fields owned by bots.js (not in the shared contract)
     path: null, pathIdx: 0, destWp: -1, baseYaw: 0,
     scanPhase: i * 1.3, targetId: null, heardEv: null,
@@ -93,7 +96,11 @@ export function resetRound(state, world) {
   p.hp = 100; p.alive = true; p.crouch = false; p.onGround = true;
   p.mag = p.weapon === 'rifle' ? 30 : 12;
   p.reserve = p.weapon === 'rifle' ? 90 : 36;
-  p.reloading = false; p.reloadT = 0; p.grenades = 1;
+  p.reloading = false; p.reloadT = 0;
+  // v2: grenades persist across rounds (no free refill) — the $300 buy
+  // is a real decision now, like the rifle. startMatch zeroes them for
+  // a fresh match; a mid-match resetRound leaves the count alone.
+  if (p.grenades === undefined || p.grenades === null) p.grenades = 0;
   p.spread = 0; p.recoil = 0; p.planting = 0; p.defusing = 0;
   let ai = 0, di = 0;
   for (const b of state.bots) {
@@ -108,6 +115,9 @@ export function resetRound(state, world) {
     b.state = 'move'; b.holdT = 6; b.aimErr = 0;
     b.burstLeft = 0; b.burstT = 0; b.reactT = 0; b.hearPos = null;
     b.hasBomb = false; b.path = null; b.pathIdx = 0; b.destWp = -1;
+    // v2: ATK bots restock one frag per round; kills/deaths are match
+    // totals and are NOT reset here (the Tab scoreboard shows the match).
+    b.grenades = 1; b.thrownAtSite = false;
     b.baseYaw = s.yaw || 0; b.targetId = null; b.heardEv = null;
     const def = BOT_DEFS.find(d => d.id === b.id);
     b.wp = def ? def.wp : 1;

@@ -14,8 +14,9 @@ export function buildHUD() {
       bombFill: $('bomb-bar-fill'), banner: $('banner'), bannerSub: $('banner-sub'),
       grenadeNum: $('grenade-num'), buyHint: $('buy-hint'),
       menuOverlay: $('menu-overlay'), buyOverlay: $('buy-overlay'),
+      scoreboard: $('scoreboard'), scoreRows: $('score-rows'),
     },
-    last: {}, evIdx: 0, bombState: null, bannerUntil: 0, hitT: 0,
+    last: {}, evIdx: 0, bombState: null, bannerUntil: 0, hitT: 0, scoreSig: '',
   };
 }
 
@@ -106,5 +107,21 @@ export function updateHUD(state, hud) {
   if (el.buyOverlay && hud.last.buy !== (state.phase === 'buy')) {
     hud.last.buy = state.phase === 'buy';
     el.buyOverlay.style.display = state.phase === 'buy' ? 'flex' : 'none';
+  }
+  // Scoreboard (v2): fill the Tab overlay from match K/D totals, only
+  // while it is open and only when a value changed (signature guard).
+  if (el.scoreboard && el.scoreRows && el.scoreboard.style.display === 'flex') {
+    const rows = [{ name: 'You', team: 'atk', kills: p.kills || 0, deaths: p.deaths || 0 }]
+      .concat((state.bots || []).map((b) => ({
+        name: b.name || b.id, team: b.team, kills: b.kills || 0, deaths: b.deaths || 0,
+      })));
+    const sig = rows.map((r) => r.name + ':' + r.kills + '/' + r.deaths).join('|');
+    if (hud.scoreSig !== sig) {
+      hud.scoreSig = sig;
+      el.scoreRows.innerHTML = rows.map((r) =>
+        '<tr><td>' + r.name + '</td><td class="team-' + r.team + '">' +
+        (r.team === 'atk' ? 'EMBER' : 'JACKAL') + '</td><td>' + r.kills +
+        '</td><td>' + r.deaths + '</td></tr>').join('');
+    }
   }
 }
