@@ -58,6 +58,12 @@
   .buy-card span { font-size: 12px; opacity: .8; }
   .buy-card .price { color: #e8b34b; font-weight: 700; font-size: 14px; }
   #buy-overlay { display: none; }
+  #scoreboard { display: none; }
+  #scoreboard table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+  #scoreboard th, #scoreboard td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #333a44; }
+  #scoreboard th { color: #e8b34b; letter-spacing: 2px; font-size: 12px; }
+  #scoreboard .team-atk { color: #ff8c2e; }
+  #scoreboard .team-def { color: #6ea8ff; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
@@ -85,10 +91,10 @@
     <div><span id="hp-num">100</span> HP &nbsp;<span id="armor-num">0</span> ARMOR</div>
   </div>
   <div id="ammo">
-    <div id="weapon-name">VK-7 Kestrel</div>
-    <div><span id="ammo-mag">30</span> / <span id="ammo-res">90</span></div>
+    <div id="weapon-name">P9 Sidearm</div>
+    <div><span id="ammo-mag">12</span> / <span id="ammo-res">36</span></div>
     <div id="money-num">$800</div>
-    <div id="grenade-num">Grenades: 1</div>
+    <div id="grenade-num">Grenades: 0</div>
   </div>
   <div id="buy-hint">BUY PHASE — press B to open the buy menu</div>
 </div>
@@ -102,7 +108,7 @@
       <b>WASD</b> move &nbsp; <b>Mouse</b> aim &nbsp; <b>Click</b> fire<br>
       <b>Shift</b> walk &nbsp; <b>Ctrl / C</b> crouch &nbsp; <b>Space</b> jump<br>
       <b>R</b> reload &nbsp; <b>1 / 2</b> switch weapon &nbsp; <b>G</b> grenade<br>
-      <b>E</b> plant / defuse (hold) &nbsp; <b>B</b> buy menu
+      <b>E</b> plant / defuse (hold) &nbsp; <b>B</b> buy menu &nbsp; <b>Tab</b> scoreboard
     </div>
     <br><button id="start-btn">CLICK TO DEPLOY</button>
   </div>
@@ -114,10 +120,20 @@
       <div class="buy-card"><b>VK-7 Kestrel</b><span>Assault rifle — 30 rounds, auto</span><br><span class="price">$2700</span><br><button id="buy-rifle-btn">BUY</button></div>
       <div class="buy-card"><b>P9 Sidearm</b><span>Pistol — 12 rounds</span><br><span class="price">$500</span><br><button id="buy-pistol-btn">BUY</button></div>
       <div class="buy-card"><b>Plating</b><span>Armor — absorbs damage</span><br><span class="price">$650</span><br><button id="buy-armor-btn">BUY</button></div>
-      <div class="buy-card"><b>Ember Grenade</b><span>Explosive — 1 per round</span><br><span class="price">$300</span><br><button id="buy-nade-btn">BUY</button></div>
+      <div class="buy-card"><b>Ember Grenade</b><span>Explosive — max 2 carried</span><br><span class="price">$300</span><br><button id="buy-nade-btn">BUY</button></div>
     </div>
     <p>Press B again to close and return to the round.</p>
     <button id="buy-close-btn">CLOSE</button>
+  </div>
+</div>
+<div id="scoreboard" class="overlay">
+  <div class="panel">
+    <h2>SCOREBOARD</h2>
+    <table>
+      <thead><tr><th>PLAYER</th><th>TEAM</th><th>KILLS</th><th>DEATHS</th></tr></thead>
+      <tbody id="score-rows"></tbody>
+    </table>
+    <p>Hold Tab to keep it open.</p>
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>
